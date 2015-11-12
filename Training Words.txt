@@ -1,0 +1,35 @@
+Train:	(25 words)
+A	E	I	O	U	(vowel sounds)   
+bag	egg	piece	on	use
+cat	set	fit	pawn	book
+par	mend	bin	ton	root
+fan	fence	wig	law	hoop
+wham	ebb	reek	ore	sure
+
+
+Test:	(25 words)
+A	E	I	O	U	(vowel sounds)
+sad	end	ill	boss	hue
+pal	zen	mint	ode	soot
+cab	sense			
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

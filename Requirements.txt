@@ -1,0 +1,7 @@
+Additional python libraries needed not yet included in standard distribution 
+
+pip install pyaudio
+
+pip install scipy
+
+https://github.com/jameslyons/python_speech_features
