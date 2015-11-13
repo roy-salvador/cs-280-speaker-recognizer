@@ -98,8 +98,24 @@ def getLabelVectorForUser(userID) :
       labelVector.append(1)
     else :
       labelVector.append(-1)
-  
   return labelVector
+
+# Scale the raw MFCC feature points so that each "column" is
+# normalized to the same scale
+# Linear stretch from lowest value = -1 to highest value = 1
+def scaleMFCCFeatures(mfccFeatures) :
+  high = 1.0
+  low = -1.0
+  
+  # use scaling factors of the Training set
+  mins = numpy.min(RAW_TRAINING_MFCC_FEATURES, axis=0)
+  maxs = numpy.max(RAW_TRAINING_MFCC_FEATURES, axis=0)
+  rng = maxs - mins
+  
+  scaled_points = high - (((high - low) * (maxs - mfccFeatures)) / rng)
+  return scaled_points.tolist()
+  
+  
   
 # Trains all the user SVMS with the new training data of the new user
 def train_user_svms(name, audioFile) :
@@ -134,13 +150,16 @@ def train_user_svms(name, audioFile) :
     i = i+1
   mfccFile.close()
   
+  # Scale the training data first 
+  scaledMFCC = scaleMFCCFeatures(RAW_TRAINING_MFCC_FEATURES)
+  
   # Train an SVM for each user
   i=0
   while i < len(USERS) :
     print '************************************************************'
     print 'Training SVM #' + str(i) + ' for user ' + USERS[i]
-    prob = svm_problem(getLabelVectorForUser(i), RAW_TRAINING_MFCC_FEATURES)
-    param = svm_parameter('-t 2')  #use RBF kernel
+    prob = svm_problem(getLabelVectorForUser(i), scaledMFCC)
+    param = svm_parameter('-t 2 -c 32.0 -g 0.5')  #use RBF kernel
     m = svm_train(prob, param)
     svm_save_model('model/user' + str(i) + '.model', m)
     i = i+1
@@ -159,6 +178,9 @@ def classify_audio(audioFile) :
   y = []
   for mf in mfccFeatures:
     y.append(1)   # assume mfcc vector belongs to the user
+   
+  # Scale the test data using scaling factors used in training data
+  scaledMFCC = scaleMFCCFeatures(mfccFeatures)
   
   # Get accuracy for every user
   i=0
@@ -166,7 +188,7 @@ def classify_audio(audioFile) :
     print '************************************************************'
     print 'Predicting SVM #' + str(i) + ' for user ' + USERS[i]
     m = svm_load_model('model/user' + str(i) + '.model')
-    p_label, p_acc, p_val = svm_predict(y, mfccFeatures, m)
+    p_label, p_acc, p_val = svm_predict(y, scaledMFCC, m)
     results['rec' + str(i)] = {'Name': USERS[i], 'Accuracy (%)': p_acc[0]}
    
     i = i+1
