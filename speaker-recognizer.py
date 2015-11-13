@@ -1,10 +1,12 @@
-import Tkinter, Tkconstants, tkFileDialog, tkSimpleDialog
+import Tkinter, Tkconstants, tkFileDialog, tkSimpleDialog, tkMessageBox
 import os
 import shutil
 import thread
 import pyaudio
 import speakerclassifier
 import wave
+from tkintertable import TableCanvas, TableModel
+import time
 
 class SpeakerRecognizerFrame(Tkinter.Frame):
 
@@ -14,6 +16,7 @@ class SpeakerRecognizerFrame(Tkinter.Frame):
     Tkinter.Frame.__init__(self, root)
     
     # default_mode
+    self.root = root
     self.state = 'normal'
 
     # options for buttons
@@ -35,7 +38,7 @@ class SpeakerRecognizerFrame(Tkinter.Frame):
     self.button_save.grid(padx=5, pady=10, row=3, column=4)
     self.button_train = Tkinter.Button(self, text='Train', command=self.train_handler, state='disable')
     self.button_train.grid(padx=5, pady=10, row=4, column=2)
-    self.button_classify = Tkinter.Button(self, text='Classify', command=self.askdirectory, state='disable')
+    self.button_classify = Tkinter.Button(self, text='Classify', command=self.classify_handler, state='disable')
     self.button_classify.grid(padx=5, pady=10, row=4, column=3)
 
     # define options for opening or saving a file
@@ -204,15 +207,60 @@ class SpeakerRecognizerFrame(Tkinter.Frame):
   # Train Button Click Event Handler
   def train_handler(self):
 
-    print tkSimpleDialog.askstring('Train', 'Training the system with current audio file. \n\nWhat is your name?')      
+    name = tkSimpleDialog.askstring('Train', 'Training the system with current audio file. \n\nWhat is your name?')
+    if name is None :
+      tkMessageBox.showerror('Train', 'You must enter a name to associate the current audio file.')
+    else :
+      # Show Training waiting window
+      wdw = Tkinter.Toplevel()
+      wdw.title('Training')
+      Tkinter.Label(wdw, text="SVM Training in Progress... Please wait", font=("Helvetica", 12), width=50, fg="blue").pack()
+      wdw.update()
+      wdw.deiconify()
+      speakerclassifier.train_user_svms(name, self.currentFile)
+      wdw.destroy()
+      tkMessageBox.showinfo('Train', 'Training complete')
       
-  def askdirectory(self):
+      
+      
+  
+  # Classify Button Click Event Handler
+  def classify_handler(self):
 
-    """Returns a selected directoryname."""
-
-    return tkFileDialog.askdirectory(**self.dir_opt)
+    # Show Classification waiting window
+    wdw = Tkinter.Toplevel()
+    wdw.title('Classification Results')
+    Tkinter.Label(wdw, text="Classification in Progress... Please wait", font=("Helvetica", 12), width=50, fg="blue").pack()
+    wdw.update()
+    wdw.deiconify()
+  
+    # Predict and load results
+    resultModel = TableModel()
+    resultDict = speakerclassifier.classify_audio(self.currentFile)
+    if len(resultDict) > 0 :
+      resultModel.importDict(resultDict)
+    wdw.destroy()
+  
+    if len(resultDict) > 0 :
+      # Show Classification results in modal table window
+      wdw = Tkinter.Toplevel()
+      wdw.geometry('+200+200')
+      wdw.title('Classification Results')
+      tframe = Tkinter.Frame(wdw)
+      tframe.pack()
+      
+      table = TableCanvas(tframe, model=resultModel, editable=False)
+      table.createTableFrame()
+      table.sortTable(columnName='Accuracy (%)', reverse=True)
+      wdw.transient(self.root)
+      wdw.grab_set()
+      self.root.wait_window(wdw)
+    else :
+      tkMessageBox.showerror('Classification Results', 'There are currently no users in the System')
+    
     
 if __name__=='__main__':
+  speakerclassifier.init()
   root = Tkinter.Tk()
   SpeakerRecognizerFrame(root).grid()
   root.title('Speaker Recognizer')

@@ -4,4 +4,8 @@ pip install pyaudio
 
 pip install scipy
 
+Python Speech Features
 https://github.com/jameslyons/python_speech_features
+
+Libsvm Python Interface
+http://www.lfd.uci.edu/~gohlke/pythonlibs/#libsvm
