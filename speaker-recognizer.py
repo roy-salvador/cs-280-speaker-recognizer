@@ -244,14 +244,15 @@ class SpeakerRecognizerFrame(Tkinter.Frame):
     if len(resultDict) > 0 :
       # Show Classification results in modal table window
       wdw = Tkinter.Toplevel()
-      wdw.geometry('+200+200')
+      wdw.geometry('300x200+200+200')
       wdw.title('Classification Results')
       tframe = Tkinter.Frame(wdw)
       tframe.pack()
       
       table = TableCanvas(tframe, model=resultModel, editable=False)
       table.createTableFrame()
-      table.sortTable(columnName='Accuracy (%)', reverse=True)
+      table.sortTable(columnName='Score (%)', reverse=True)
+      
       wdw.transient(self.root)
       wdw.grab_set()
       self.root.wait_window(wdw)

@@ -158,8 +158,14 @@ def train_user_svms(name, audioFile) :
   while i < len(USERS) :
     print '************************************************************'
     print 'Training SVM #' + str(i) + ' for user ' + USERS[i]
-    prob = svm_problem(getLabelVectorForUser(i), scaledMFCC)
-    param = svm_parameter('-t 2 -c 32.0 -g 0.5')  #use RBF kernel
+    labelVector = getLabelVectorForUser(i)
+    
+    # Compute class weights for unbalanced data
+    positiveWeight =  1.0*labelVector.count(1)/len(labelVector)
+    negativeWeight = 1.0*labelVector.count(-1)/len(labelVector)
+    
+    prob = svm_problem(labelVector, scaledMFCC)
+    param = svm_parameter('-t 2 -c 32.0 -g 0.5 -w1 ' + str(negativeWeight) + ' -w-1 ' + str(positiveWeight) )  #use RBF kernel
     m = svm_train(prob, param)
     svm_save_model('model/user' + str(i) + '.model', m)
     i = i+1
@@ -189,7 +195,7 @@ def classify_audio(audioFile) :
     print 'Predicting SVM #' + str(i) + ' for user ' + USERS[i]
     m = svm_load_model('model/user' + str(i) + '.model')
     p_label, p_acc, p_val = svm_predict(y, scaledMFCC, m)
-    results['rec' + str(i)] = {'Name': USERS[i], 'Accuracy (%)': p_acc[0]}
+    results['rec' + str(i)] = {'Name': USERS[i], 'Score (%)': round(p_acc[0],2)}
    
     i = i+1
     
