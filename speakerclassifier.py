@@ -2,8 +2,12 @@ import pyaudio
 import numpy
 import scipy.io.wavfile as wav
 from features import mfcc
+from features import ssc
 import math
 from svmutil import *
+import datetime
+import random
+import math
 
 # Wave File Format
 FORMAT = pyaudio.paInt16
@@ -19,13 +23,13 @@ VOICE_ACTIVITY_THRESHOLD = 200  # This could be adjusted based on capability of 
 
 # SVM Training Data
 USERS = []
-RAW_TRAINING_MFCC_FEATURES = []
+RAW_TRAINING_FEATURES = []
 RAW_TRAINING_LABELS = []
 
 # Initialization
 def init() :
   global USERS
-  global RAW_TRAINING_MFCC_FEATURES
+  global RAW_TRAINING_FEATURES
   global RAW_TRAINING_LABELS
   
   # Load Users
@@ -37,24 +41,24 @@ def init() :
   
   # Load Raw Training Data
   print 'Initializing saved training data'
-  trainFile = open("model/raw_mfcc_training.csv", "r")
+  trainFile = open("model/raw_features_training.csv", "r")
   for line in trainFile:
     j=0
-    mfccVector = []
+    featuresVector = []
     for value in line.strip().split(',') :
       if j==0 :
         RAW_TRAINING_LABELS.append(int(value))
       else :
-        mfccVector.append(float(value)) 
+        featuresVector.append(float(value)) 
       j = j+1
-    RAW_TRAINING_MFCC_FEATURES.append(mfccVector)	
+    RAW_TRAINING_FEATURES.append(featuresVector)	
   trainFile.close()
     
 
 # Extracts the MFCC Feature vectors of the audio file
-def extract_mfcc(audioFile) :
-  print 'Extracting MFCC Features of ' + audioFile
-  mfccFeatures = []
+def extract_features(audioFile) :
+  print 'Extracting Features of ' + audioFile
+  audioFeatures = []
   
   (rate,sig) = wav.read(audioFile)
     
@@ -77,15 +81,25 @@ def extract_mfcc(audioFile) :
     
     # Scrap frames not meeting threshold / frames with weak signals (indicative of no voice activity)
     if numpy.mean(numpy.absolute(windowedFrame)) > VOICE_ACTIVITY_THRESHOLD :
-      # Get MFCC feature of the current frame
-      featureVectors = mfcc(windowedFrame, samplerate=rate, winlen=FRAME_LENGTH)
-      mfccFeatures = mfccFeatures + featureVectors.tolist() 
+      # Get feature of the current frame
+      featureVectors = [] #mfcc(windowedFrame, samplerate=rate, winlen=FRAME_LENGTH) + ssc(windowedFrame, samplerate=rate, winlen=FRAME_LENGTH)
+      mfccFeatures = [] 
+      sscFeatures = [] 
+      mfccFeatures = mfcc(windowedFrame, samplerate=rate, winlen=FRAME_LENGTH).tolist()
+      sscFeatures = ssc(windowedFrame, samplerate=rate, winlen=FRAME_LENGTH).tolist()
+      j=0
+      while j<len(mfccFeatures) :
+        featureVectors.append(mfccFeatures[j] + sscFeatures[j])
+        j=j+1
+      
+      #audioFeatures = audioFeatures + featureVectors.tolist() 
+      audioFeatures = audioFeatures + featureVectors
       
     #print str(i) + ' ' + str(numpy.mean(numpy.absolute(windowedFrame)))
     i = i + overlap
  
-  print 'There are ' + str(len(mfccFeatures)) + ' extracted MFCC feature vectors.'
-  return mfccFeatures
+  print 'There are ' + str(len(audioFeatures)) + ' extracted MFCC feature vectors.'
+  return audioFeatures
 
 # Returns the label vector for the binary classifier of the user
 #   1 tagged as MFCC feature of the user
@@ -100,26 +114,53 @@ def getLabelVectorForUser(userID) :
       labelVector.append(-1)
   return labelVector
 
-# Scale the raw MFCC feature points so that each "column" is
+# Returns a sampled dataset for the user including all the user's original data + sampled data from other users
+#   1 tagged as MFCC feature of the user
+#  -1 tagged as MFCC feature is not the user's
+def getTrainingDataForUser(userID):
+  labels = []
+  attributes =[]
+  negative_class = []
+  
+  i=0
+  while i<len(RAW_TRAINING_FEATURES) :
+    if userID == RAW_TRAINING_LABELS[i]:
+      labels.append(1)
+      attributes.append(RAW_TRAINING_FEATURES[i])
+    else :
+      negative_class.append(RAW_TRAINING_FEATURES[i])
+    i=i+1
+  user_instance_count = len(labels)  
+    
+  while (len(labels) <  user_instance_count*2) and (len(negative_class) > 0) :
+    random_index = int(math.floor(len(negative_class)*random.random()))
+    
+    labels.append(-1)
+    attributes.append(negative_class[random_index])
+    del negative_class[random_index]
+  
+  return labels, attributes
+
+# Scale the raw feature points so that each "column" is
 # normalized to the same scale
 # Linear stretch from lowest value = -1 to highest value = 1
-def scaleMFCCFeatures(mfccFeatures) :
+def scaleFeatures(audioFeatures) :
   high = 1.0
   low = -1.0
   
   # use scaling factors of the Training set
-  mins = numpy.min(RAW_TRAINING_MFCC_FEATURES, axis=0)
-  maxs = numpy.max(RAW_TRAINING_MFCC_FEATURES, axis=0)
+  mins = numpy.min(RAW_TRAINING_FEATURES, axis=0)
+  maxs = numpy.max(RAW_TRAINING_FEATURES, axis=0)
   rng = maxs - mins
   
-  scaled_points = high - (((high - low) * (maxs - mfccFeatures)) / rng)
+  scaled_points = high - (((high - low) * (maxs - audioFeatures)) / rng)
   return scaled_points.tolist()
   
   
   
 # Trains all the user SVMS with the new training data of the new user
 def train_user_svms(name, audioFile) :
-  global RAW_TRAINING_MFCC_FEATURES
+  global RAW_TRAINING_FEATURES
   global RAW_TRAINING_LABELS
   global USERS
 
@@ -135,40 +176,43 @@ def train_user_svms(name, audioFile) :
   usersFile.close()
   
   # Extract and save user MFCC Features
-  mfccFeatures = extract_mfcc(audioFile)
-  RAW_TRAINING_MFCC_FEATURES = RAW_TRAINING_MFCC_FEATURES + mfccFeatures
+  audioFeatures = extract_features(audioFile)
+  RAW_TRAINING_FEATURES = RAW_TRAINING_FEATURES + audioFeatures
   i=0
-  while i < len(mfccFeatures) :
+  while i < len(audioFeatures) :
     RAW_TRAINING_LABELS.append(userID)
     i=i+1
   # Persist training data
   print 'Saving obtained training data'
-  mfccFile = open("model/raw_mfcc_training.csv", "w")
+  featuresFile = open("model/raw_features_training.csv", "w")
   i=0
   while i<len(RAW_TRAINING_LABELS) :
-    mfccFile.write(str(RAW_TRAINING_LABELS[i]) + ',' + str(RAW_TRAINING_MFCC_FEATURES[i]).lstrip('[').rstrip(']') + '\n')
+    featuresFile.write(str(RAW_TRAINING_LABELS[i]) + ',' + str(RAW_TRAINING_FEATURES[i]).lstrip('[').rstrip(']') + '\n')
     i = i+1
-  mfccFile.close()
+  featuresFile.close()
   
   # Scale the training data first 
-  scaledMFCC = scaleMFCCFeatures(RAW_TRAINING_MFCC_FEATURES)
-  
+  #scaledMFCC = scaleFeatures(RAW_TRAINING_FEATURES)
+
   # Train an SVM for each user
+  
   i=0
   while i < len(USERS) :
     print '************************************************************'
     print 'Training SVM #' + str(i) + ' for user ' + USERS[i]
-    labelVector = getLabelVectorForUser(i)
+    print  'Start Time: ' + str(datetime.datetime.now()) 
+    labelVector, attribs = getTrainingDataForUser(i) #getLabelVectorForUser(i)
     
     # Compute class weights for unbalanced data
-    positiveWeight =  1.0*labelVector.count(1)/len(labelVector)
-    negativeWeight = 1.0*labelVector.count(-1)/len(labelVector)
+    #positiveWeight =  1.0*labelVector.count(1)/len(labelVector)
+    #negativeWeight = 1.0*labelVector.count(-1)/len(labelVector)
     
-    prob = svm_problem(labelVector, scaledMFCC)
-    param = svm_parameter('-t 2 -c 32.0 -g 0.5 -w1 ' + str(negativeWeight) + ' -w-1 ' + str(positiveWeight) )  #use RBF kernel
+    prob = svm_problem(labelVector, scaleFeatures(attribs))
+    param = svm_parameter('-t 2 -c 32.0 -g 0.76923 ') #-w1 ' + str(negativeWeight) + ' -w-1 ' + str(positiveWeight) )  #use RBF kernel
     m = svm_train(prob, param)
     svm_save_model('model/user' + str(i) + '.model', m)
     i = i+1
+    print  'End Time: ' + str(datetime.datetime.now()) 
     
   print '************************************************************'
   print 'Training Complete'
@@ -179,14 +223,14 @@ def classify_audio(audioFile) :
   print '============================================================================================='
   print 'Predicting which user is speaking in the audio file'
   
-  # Extract MFCC Features and initialize label vector
-  mfccFeatures = extract_mfcc(audioFile)
+  # Extract Features and initialize label vector
+  audioFeatures = extract_features(audioFile)
   y = []
-  for mf in mfccFeatures:
-    y.append(1)   # assume mfcc vector belongs to the user
+  for mf in audioFeatures:
+    y.append(1)   # assume features vector belongs to the user
    
   # Scale the test data using scaling factors used in training data
-  scaledMFCC = scaleMFCCFeatures(mfccFeatures)
+  scaledAudioFeatures = scaleFeatures(audioFeatures)
   
   # Get accuracy for every user
   i=0
@@ -194,7 +238,7 @@ def classify_audio(audioFile) :
     print '************************************************************'
     print 'Predicting SVM #' + str(i) + ' for user ' + USERS[i]
     m = svm_load_model('model/user' + str(i) + '.model')
-    p_label, p_acc, p_val = svm_predict(y, scaledMFCC, m)
+    p_label, p_acc, p_val = svm_predict(y, scaledAudioFeatures, m)
     results['rec' + str(i)] = {'Name': USERS[i], 'Score (%)': round(p_acc[0],2)}
    
     i = i+1
