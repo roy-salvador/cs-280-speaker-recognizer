@@ -14,6 +14,7 @@ The following Python libraries not yet included in Python 2.7.10 Standard distri
 * [Python Speech Features](https://github.com/jameslyons/python_speech_features) by James Lyons
 
 ## Instructions
+After installing required Python libraries
 1. Clone and download the repository.
 2. Go to the downloaded directory and run the application
 
