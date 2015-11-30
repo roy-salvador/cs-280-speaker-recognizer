@@ -8,6 +8,11 @@ from svmutil import *
 import datetime
 import random
 import math
+from sklearn import tree
+from scipy.stats import itemfreq
+from sklearn.svm import LinearSVC
+from sklearn.multiclass import OneVsRestClassifier
+from sklearn.naive_bayes import GaussianNB
 
 # Wave File Format
 FORMAT = pyaudio.paInt16
@@ -21,16 +26,28 @@ FRAME_LENGTH = 0.030 # sec
 OVERLAP = 0.010 #sec
 VOICE_ACTIVITY_THRESHOLD = 200  # This could be adjusted based on capability of microphone/audio system of the computer
 
-# SVM Training Data
+# Training Data
 USERS = []
 RAW_TRAINING_FEATURES = []
 RAW_TRAINING_LABELS = []
+
+# Decision Tree
+DT_CLF = tree.DecisionTreeClassifier()
+
+# OvR MuliClass SVM
+OVR_SVM_CLF = None
+
+# Gaussian Naive Bayes
+GNB_CLF = None
 
 # Initialization
 def init() :
   global USERS
   global RAW_TRAINING_FEATURES
   global RAW_TRAINING_LABELS
+  global DT_CLF
+  global OVR_SVM_CLF
+  global GNB_CLF
   
   # Load Users
   print 'Initializing saved users'
@@ -53,6 +70,22 @@ def init() :
       j = j+1
     RAW_TRAINING_FEATURES.append(featuresVector)	
   trainFile.close()
+  
+  if len(RAW_TRAINING_FEATURES) > 0:
+    # Initialize Decision Tree
+    print 'Initializing Decision Tree from saved training data'
+    DT_CLF = DT_CLF.fit(scaleFeatures(RAW_TRAINING_FEATURES), RAW_TRAINING_LABELS)
+    
+    # Initialize Multi Class OVR SVM
+    if numpy.bincount(RAW_TRAINING_LABELS).size > 1 :
+      print 'Initializing One vs Rest Multi Class SVM from saved training data'
+      OVR_SVM_CLF = OneVsRestClassifier(LinearSVC(random_state=0)).fit(scaleFeatures(RAW_TRAINING_FEATURES), RAW_TRAINING_LABELS)
+    
+    # Initialize Naive Bayes Classifier
+    print 'Initializing Naive Bayes Classifier from saved training data'
+    GNB_CLF = GaussianNB().fit(scaleFeatures(RAW_TRAINING_FEATURES), RAW_TRAINING_LABELS)
+  
+  # ADDCLASSIFIER: Add training code to initialize classifier on startup
     
 
 # Extracts the MFCC Feature vectors of the audio file
@@ -156,13 +189,14 @@ def scaleFeatures(audioFeatures) :
   scaled_points = high - (((high - low) * (maxs - audioFeatures)) / rng)
   return scaled_points.tolist()
   
-  
-  
 # Trains all the user SVMS with the new training data of the new user
-def train_user_svms(name, audioFile) :
+def train_user(name, audioFile) :
   global RAW_TRAINING_FEATURES
   global RAW_TRAINING_LABELS
   global USERS
+  global DT_CLF
+  global OVR_SVM_CLF
+  global GNB_CLF
 
   # Add and save the new user
   print '============================================================================================='
@@ -190,35 +224,53 @@ def train_user_svms(name, audioFile) :
     featuresFile.write(str(RAW_TRAINING_LABELS[i]) + ',' + str(RAW_TRAINING_FEATURES[i]).lstrip('[').rstrip(']') + '\n')
     i = i+1
   featuresFile.close()
-  
-  # Scale the training data first 
-  #scaledMFCC = scaleFeatures(RAW_TRAINING_FEATURES)
 
-  # Train an SVM for each user
-  
+
+  # Train an SVM for each user 
   i=0
   while i < len(USERS) :
     print '************************************************************'
     print 'Training SVM #' + str(i) + ' for user ' + USERS[i]
     print  'Start Time: ' + str(datetime.datetime.now()) 
-    labelVector, attribs = getTrainingDataForUser(i) #getLabelVectorForUser(i)
-    
-    # Compute class weights for unbalanced data
-    #positiveWeight =  1.0*labelVector.count(1)/len(labelVector)
-    #negativeWeight = 1.0*labelVector.count(-1)/len(labelVector)
-    
+    labelVector, attribs = getTrainingDataForUser(i) #getLabelVectorForUser(i)    
     prob = svm_problem(labelVector, scaleFeatures(attribs))
-    param = svm_parameter('-t 2 -c 32.0 -g 0.76923 ') #-w1 ' + str(negativeWeight) + ' -w-1 ' + str(positiveWeight) )  #use RBF kernel
+    param = svm_parameter('-t 2 -c 32.0 -g 0.76923 ') #use RBF kernel
     m = svm_train(prob, param)
     svm_save_model('model/user' + str(i) + '.model', m)
     i = i+1
     print  'End Time: ' + str(datetime.datetime.now()) 
-    
+  
+  # Train Decision Tree
+  print '****************************************************************'
+  print 'Training Decision Tree'
+  print  'Start Time: ' + str(datetime.datetime.now()) 
+  DT_CLF = DT_CLF.fit(scaleFeatures(RAW_TRAINING_FEATURES), RAW_TRAINING_LABELS)
+  print  'End Time: ' + str(datetime.datetime.now())    
+
+   # Train OvR Multi Class SVM
+  print '****************************************************************'
+  print 'One vs Rest Multi Class SVM'
+  if numpy.bincount(RAW_TRAINING_LABELS).size > 1 :
+    print  'Start Time: ' + str(datetime.datetime.now()) 
+    OVR_SVM_CLF = OneVsRestClassifier(LinearSVC(random_state=0)).fit(scaleFeatures(RAW_TRAINING_FEATURES), RAW_TRAINING_LABELS)
+    print  'End Time: ' + str(datetime.datetime.now())
+  else :
+    print 'Must have at least 2 users for One vs Rest Classifier to start training'
+  
+   # Train Decision Tree
+  print '****************************************************************'
+  print 'Training Naive Bayes Classifier'
+  print  'Start Time: ' + str(datetime.datetime.now()) 
+  GNB_CLF = GaussianNB().fit(scaleFeatures(RAW_TRAINING_FEATURES), RAW_TRAINING_LABELS)
+  print  'End Time: ' + str(datetime.datetime.now())     
+  
+  # ADDCLASSIFIER: Add training code here
+  
   print '************************************************************'
   print 'Training Complete'
  
-# Returns the SVM prediction accuracies in the dict format the tktable can use 
-def classify_audio(audioFile) : 
+# Returns the prediction accuracies of classifier in the dict format the tktable can use 
+def classify_audio(audioFile, chosenClassifier) : 
   results = {}
   print '============================================================================================='
   print 'Predicting which user is speaking in the audio file'
@@ -233,18 +285,46 @@ def classify_audio(audioFile) :
   scaledAudioFeatures = scaleFeatures(audioFeatures)
   
   # Get accuracy for every user
-  i=0
-  while i < len(USERS) :
+  if chosenClassifier == "using Binary SVM per user" :
+    i=0
+    while i < len(USERS) :
+      print '************************************************************'
+      print 'Predicting SVM #' + str(i) + ' for user ' + USERS[i]
+      m = svm_load_model('model/user' + str(i) + '.model')
+      p_label, p_acc, p_val = svm_predict(y, scaledAudioFeatures, m)
+      results['rec' + str(i)] = {'Name': USERS[i], 'Score (%)': round(p_acc[0],2)}
+      i = i+1
+  else :
     print '************************************************************'
-    print 'Predicting SVM #' + str(i) + ' for user ' + USERS[i]
-    m = svm_load_model('model/user' + str(i) + '.model')
-    p_label, p_acc, p_val = svm_predict(y, scaledAudioFeatures, m)
-    results['rec' + str(i)] = {'Name': USERS[i], 'Score (%)': round(p_acc[0],2)}
-   
-    i = i+1
+    
+    if chosenClassifier == "using Decision Tree" :
+      print 'Predicting using Decision Tree'
+      res =  DT_CLF.predict(scaledAudioFeatures)
+    elif chosenClassifier == "using OvR Multi Class SVM" :
+      print 'Predicting using One vs Rest Multi Class SVM'
+      if numpy.bincount(RAW_TRAINING_LABELS).size > 1 :
+        res =  OVR_SVM_CLF.predict(scaledAudioFeatures)
+      else :
+        print 'Must have at least 2 users for One vs Rest Classifier to be able to classify'
+    elif chosenClassifier == "using Naive Bayes Classifier" :
+      print  'Predicting using Naive Bayes Classifier'
+      res =  GNB_CLF.predict(scaledAudioFeatures)
+    # ADDCLASSIFIER: Add predict code here
+      
+    #Get frequencies of each class label
+    freq = numpy.bincount(res)
+    #print numpy.bincount(res), freq.size
+
+    for i in range(len(USERS)):
+        j = 0
+        score = 0
+        while (j < freq.size):
+          if (j == i):
+            score = (float(freq[j])/len(audioFeatures))*100
+            break
+          j = j + 1
+        results['rec' + str(i)] = {'Name': USERS[i], 'Score (%)': round(score,2)}
     
   print '************************************************************'
   print 'Predictions Complete'
   return results
-  
-  

@@ -1,5 +1,11 @@
 # cs-280-speaker-recognizer
-An end-to-end Speaker Recognition System written in Python using Mel Frequency Cepstral Coefficients (MFCC) and Spectral Subband Centroid (SSC) for features and Support Vector Machine for classifier. A Mini Project requirement for CS 280 Intelligent Systems course at University of the Philippines Diliman AY 2015-2016 under Sir Prospero Naval. 
+An end-to-end Speaker Recognition System written in Python using Mel Frequency Cepstral Coefficients (MFCC) and Spectral Subband Spectroid (SSC) for features. A Mini Project requirement for CS 280 Intelligent Systems course at University of the Philippines Diliman AY 2015-2016 under Sir Prospero Naval. 
+
+## Types of Classifiers Included
+* Binary SVM per user
+* One vs Rest Multi Class SVM
+* Decision Tree
+* Gaussian Naive Bayes Classifier
 
 ## Requirements
 * Python 2.7.10

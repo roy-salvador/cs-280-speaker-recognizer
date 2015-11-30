@@ -18,6 +18,7 @@ class SpeakerRecognizerFrame(Tkinter.Frame):
     # default_mode
     self.root = root
     self.state = 'normal'
+    self.currentFile = None
 
     # options for buttons
     button_opt = {'fill': Tkconstants.BOTH, 'padx': 5, 'pady': 5}
@@ -36,10 +37,16 @@ class SpeakerRecognizerFrame(Tkinter.Frame):
     self.button_load.grid(padx=5, pady=10, row=3, column=3)
     self.button_save = Tkinter.Button(self, text='Save As', command=self.asksaveasfilename, state='disable')
     self.button_save.grid(padx=5, pady=10, row=3, column=4)
-    self.button_train = Tkinter.Button(self, text='Train', command=self.train_handler, state='disable')
-    self.button_train.grid(padx=5, pady=10, row=4, column=2)
-    self.button_classify = Tkinter.Button(self, text='Classify', command=self.classify_handler, state='disable')
-    self.button_classify.grid(padx=5, pady=10, row=4, column=3)
+    self.button_train_svm = Tkinter.Button(self, text='Train', command=self.train_handler, state='disable')
+    self.button_train_svm.grid(padx=5, pady=10, row=4, column=1)
+    self.button_classify_svm = Tkinter.Button(self, text='Classify', command=self.classify_handler, state='disable')
+    self.button_classify_svm.grid(padx=5, pady=10, row=4, column=2)
+    
+    self.dropdown_value = Tkinter.StringVar()
+    # ADDCLASSIFIER: Add to option dropdown
+    self.option_classify_dropdown = Tkinter.OptionMenu(self, self.dropdown_value, "using Binary SVM per user", "using OvR Multi Class SVM", "using Decision Tree", "using Naive Bayes Classifier") 
+    self.option_classify_dropdown.grid(padx=5, pady=10, row=4, column=3, columnspan=2)
+    self.dropdown_value.set("using Binary SVM per user")
 
     # define options for opening or saving a file
     self.file_opt = options = {}
@@ -97,8 +104,10 @@ class SpeakerRecognizerFrame(Tkinter.Frame):
     self.button_play['state'] = 'normal'
     self.button_load['state'] = 'normal'
     self.button_save['state'] = 'normal'
-    self.button_classify['state'] = 'normal'
-    self.button_train['state'] = 'normal'
+    self.button_classify_svm['state'] = 'normal'
+    #self.button_classify_dt['state'] = 'normal'
+    self.button_train_svm['state'] = 'normal'
+    #self.button_train_dt['state'] = 'normal'
     self.button_record['text'] = 'Record'
     self.label['text'] = speakerclassifier.RECORDING_TEMPFILENAME
     self.currentFile = os.path.join(os.getcwd(), speakerclassifier.RECORDING_TEMPFILENAME)
@@ -112,8 +121,10 @@ class SpeakerRecognizerFrame(Tkinter.Frame):
       self.button_play['state'] = 'disable'
       self.button_load['state'] = 'disable'
       self.button_save['state'] = 'disable'
-      self.button_classify['state'] = 'disable'
-      self.button_train['state'] = 'disable'
+      self.button_classify_svm['state'] = 'disable'
+      #self.button_classify_dt['state'] = 'disable'
+      self.button_train_svm['state'] = 'disable'
+      #self.button_train_dt['state'] = 'disable'
       self.button_record['text'] = 'Finish'
       thread.start_new_thread(self.record_audio, (self,) )
       
@@ -149,8 +160,10 @@ class SpeakerRecognizerFrame(Tkinter.Frame):
     self.button_record['state'] = 'normal'
     self.button_load['state'] = 'normal'
     self.button_save['state'] = 'normal'
-    self.button_classify['state'] = 'normal'
-    self.button_train['state'] = 'normal'
+    self.button_classify_svm['state'] = 'normal'
+    #self.button_classify_dt['state'] = 'normal'
+    self.button_train_svm['state'] = 'normal'
+    #self.button_train_dt['state'] = 'normal'
     self.button_play['text'] = 'Play'
     self.label['text'] = os.path.basename(self.currentFile)
  
@@ -161,8 +174,10 @@ class SpeakerRecognizerFrame(Tkinter.Frame):
       self.button_record['state'] = 'disable'
       self.button_load['state'] = 'disable'
       self.button_save['state'] = 'disable'
-      self.button_classify['state'] = 'disable'
-      self.button_train['state'] = 'disable'
+      self.button_classify_svm['state'] = 'disable'
+      #self.button_classify_dt['state'] = 'disable'
+      self.button_train_svm['state'] = 'disable'
+      #self.button_train_dt['state'] = 'disable'
       self.button_play['text'] = 'Stop'
       thread.start_new_thread(self.play_audio, (self,) )
     
@@ -182,8 +197,10 @@ class SpeakerRecognizerFrame(Tkinter.Frame):
       
       self.button_play['state'] = 'normal'
       self.button_save['state'] = 'normal'
-      self.button_train['state'] = 'normal'
-      self.button_classify['state'] = 'normal'
+      self.button_train_svm['state'] = 'normal'
+      #self.button_train_dt['state'] = 'normal'
+      self.button_classify_svm['state'] = 'normal'
+      #self.button_classify_dt['state'] = 'normal'
        
       self.currentFile = filename
 
@@ -217,26 +234,23 @@ class SpeakerRecognizerFrame(Tkinter.Frame):
       Tkinter.Label(wdw, text="SVM Training in Progress... Please wait", font=("Helvetica", 12), width=50, fg="blue").pack()
       wdw.update()
       wdw.deiconify()
-      speakerclassifier.train_user_svms(name, self.currentFile)
+      speakerclassifier.train_user(name, self.currentFile)
       wdw.destroy()
       tkMessageBox.showinfo('Train', 'Training complete')
-      
-      
-      
   
   # Classify Button Click Event Handler
   def classify_handler(self):
 
     # Show Classification waiting window
     wdw = Tkinter.Toplevel()
-    wdw.title('Classification Results')
+    wdw.title('Classification Results ' + self.dropdown_value.get())
     Tkinter.Label(wdw, text="Classification in Progress... Please wait", font=("Helvetica", 12), width=50, fg="blue").pack()
     wdw.update()
     wdw.deiconify()
   
     # Predict and load results
     resultModel = TableModel()
-    resultDict = speakerclassifier.classify_audio(self.currentFile)
+    resultDict = speakerclassifier.classify_audio(self.currentFile, self.dropdown_value.get())
     if len(resultDict) > 0 :
       resultModel.importDict(resultDict)
     wdw.destroy()
@@ -244,8 +258,8 @@ class SpeakerRecognizerFrame(Tkinter.Frame):
     if len(resultDict) > 0 :
       # Show Classification results in modal table window
       wdw = Tkinter.Toplevel()
-      wdw.geometry('300x200+200+200')
-      wdw.title('Classification Results')
+      wdw.geometry('350x200+200+200')
+      wdw.title('Classification Results ' + self.dropdown_value.get())
       tframe = Tkinter.Frame(wdw)
       tframe.pack()
       
