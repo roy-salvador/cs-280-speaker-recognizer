@@ -9,7 +9,7 @@ An end-to-end Speaker Recognition System written in Python using Mel Frequency C
 
 ## Requirements
 * Python 2.7.10
-* Microphone capable of recording CD Quality (Stereo channels, 16 bit, 44100 Hz)
+* Microphone/Audio Input System capable of recording CD Quality (Stereo channels, 16 bit, 44100 Hz)
 
 The following Python libraries not yet included in Python 2.7.10 Standard distribution needs to be installed:
 * pyaudio
@@ -17,6 +17,7 @@ The following Python libraries not yet included in Python 2.7.10 Standard distri
 * wave
 * scipy
 * libsvm
+* scikit-learn
 * [Python Speech Features](https://github.com/jameslyons/python_speech_features) by James Lyons
 
 ## Instructions
